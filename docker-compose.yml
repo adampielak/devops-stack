@@ -1,0 +1,92 @@
+version: '2'
+services:
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: 6.5.4
+    volumes:
+      - './elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      ES_JAVA_OPTS: '-Xmx256m -Xms256m'
+    networks:
+      - devops
+  logstash:
+    build:
+      context: logstash/
+      args:
+        ELK_VERSION: 6.5.4
+    volumes:
+      - './logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro'
+      - './logstash/pipeline:/usr/share/logstash/pipeline:ro'
+    ports:
+      - '5000:5000'
+      - '9600:9600'
+    environment:
+      LS_JAVA_OPTS: '-Xmx256m -Xms256m'
+    networks:
+      - devops
+    depends_on:
+      - elasticsearch
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: 6.5.4
+    volumes:
+      - './kibana/config/:/usr/share/kibana/config:ro'
+    ports:
+      - '5601:5601'
+    networks:
+      - devops
+    depends_on:
+      - elasticsearch
+  sentry:
+    restart: unless-stopped
+    image: sentry:latest
+    depends_on:
+      - redis-sentry
+      - postgres-sentry
+      - memcached-sentry
+      - smtp-sentry
+    env_file: .env
+    environment:
+      SENTRY_MEMCACHED_HOST: memcached
+      SENTRY_REDIS_HOST: redis
+      SENTRY_POSTGRES_HOST: postgres
+      SENTRY_EMAIL_HOST: smtp
+    volumes:
+      - sentry-data:/var/lib/sentry/files
+  smtp-sentry:
+    restart: unless-stopped
+    image: tianon/exim4
+    networks:
+      - devops
+  memcached-sentry:
+    restart: unless-stopped
+    image: memcached:1.5-alpine
+    networks:
+      - devops
+  redis-sentry:
+    restart: unless-stopped
+    image: redis:3.2-alpine
+    networks:
+      - devops
+  postgres-sentry:
+    restart: unless-stopped
+    image: postgres:9.5
+    volumes:
+      - sentry-postgres:/var/lib/postgresql/data
+    networks:
+      - devops
+networks:
+  devops:
+    driver: bridge
+volumes:
+    sentry-data:
+      external: true
+    sentry-postgres:
+      external: true
